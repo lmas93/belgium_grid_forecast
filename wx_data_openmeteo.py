@@ -82,6 +82,33 @@ def get_openmeteo_forecast_api_request(latitude, longitude, start_date, end_date
     
     return request
 
+def get_openmeteo_forecast_past_api_request(latitude, longitude, past_days, freq, wx_params):
+    ''' Generate the request string to get forecasted data for the next 3 days including the start and end dates
+
+        Example: 
+            https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41
+            &past_days=10&hourly=temperature_2m,relativehumidity_2m,windspeed_10m
+
+        Parameters:
+            latitude (float):  latitude value
+            longitude (float):  longitude value
+            past_days
+            freq (string): weather data frequecy (e.g. 'hourly')
+            wx_params (list): list of strings for weather parameters
+            
+        Returns:
+            request (string):  request string to pass to historical weather API
+    '''
+    
+    latitude = float(latitude)
+    longitude = float(longitude)
+    base_uri = 'https://api.open-meteo.com/v1/forecast?'
+    wx_params = (','.join(wx_params))
+    params_uri = f"latitude={latitude}&longitude={longitude}&past_days={past_days}&{freq}={wx_params}&forecast_days=3"
+    request = base_uri + params_uri
+    
+    return request
+
 
 def get_openmeteo_api_response(api_request, freq, wx_params):
     ''' Make a request to historical weather api and convert to pandas dataframe
@@ -104,7 +131,7 @@ def get_openmeteo_api_response(api_request, freq, wx_params):
 
     return df_wx
 
-def get_wx_df(start_date, end_date, freq, wx_params, city, request_type='None'):
+def get_wx_df(start_date, end_date, past_days, freq, wx_params, city, request_type='None'):
     '''Get weather dataframe (historical or forecast) for a city with renamed columns
 
         Parameters:
@@ -127,6 +154,8 @@ def get_wx_df(start_date, end_date, freq, wx_params, city, request_type='None'):
         api_request = get_openmeteo_hist_api_request(latitude, longitude, start_date, end_date, freq, wx_params)
     elif request_type == 'forecast':
         api_request = get_openmeteo_forecast_api_request(latitude, longitude, start_date, end_date, freq, wx_params)
+    elif request_type == 'forecast_past':
+        api_request = get_openmeteo_forecast_past_api_request(latitude, longitude, past_days, freq, wx_params)
     else:
         raise ValueError
     
