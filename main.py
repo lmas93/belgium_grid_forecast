@@ -45,7 +45,7 @@ today = datetime.date.today()
 one_day_back = (today - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 start_date = '2015-01-01'
 
-df = data[start_date:one_day_back]`# both included since date time index`
+df = data[start_date:one_day_back] # both included since date time index`
 
 
 # add public holiday data
@@ -122,14 +122,42 @@ lgb_regressor.fit(X_train, y_train)
 import joblib
 # save model
 joblib.dump(lgb_regressor, 'lgb.pkl')
-# load model
-#gbm_pickle = joblib.load('lgb.pkl')
 
 
+
+
+# need to add df_prdict starting from training data (last 4 days) to be able to create lagged features
 # predict
-today = datetime.date.today()
 
-two_days_upfront = (today + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
-start_date = '2015-01-01'
 
-df_wx_antwerp = get_wx_df(today.strftime("%Y-%m-%d"), two_days_upfront, freq, wx_params, request_type='forecast', city='Antwerp')
+start_date = today.strftime("%Y-%m-%d")
+end_date = (today + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+
+# get forecast weather data
+df_wx_antwerp = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Antwerp')
+df_wx_ghent = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Ghent')
+df_wx_charleroi = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Charleroi')
+
+df_wx_merged = df_wx_antwerp.merge(df_wx_ghent, 
+                how = 'left', 
+                left_index = True,
+                right_index = True)
+
+df_wx_merged = df_wx_merged.merge(df_wx_charleroi, 
+                how = 'left', 
+                left_index = True,
+                right_index = True)
+
+df_wx_merged = df_wx_merged.resample('15T').mean().ffill()
+
+# add public holiday data
+country_code = 'BE'
+be_holidays = holidays.country_holidays(country_code)
+df_hols = df_wx_merged[df_wx_merged.index.map(lambda x: x in be_holidays)]
+df_wx_merged['is_holiday'] = np.where(df_wx_merged.index.isin(df_hols.index), 1, 0)
+
+# add calendar features to dataset
+df_predict = featurize_datetime_index(df_wx_merged)
+
+
+gbm_pickle = joblib.load('lgb.pkl')

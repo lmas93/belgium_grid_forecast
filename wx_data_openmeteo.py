@@ -105,9 +105,9 @@ def get_openmeteo_api_response(api_request, freq, wx_params):
     return df_wx
 
 def get_wx_df(start_date, end_date, freq, wx_params, city, request_type='None'):
-    '''Get weather dataframe for a city with renamed columns
+    '''Get weather dataframe (historical or forecast) for a city with renamed columns
 
-            Parameters:
+        Parameters:
             start_date (string):  starting date for data request (format is '%Y-%m-%d')
             end_date (string):  last date for data request (format is '%Y-%m-%d')
             freq (string): weather data frequency (e.g. 'hourly')
@@ -123,9 +123,9 @@ def get_wx_df(start_date, end_date, freq, wx_params, city, request_type='None'):
     latitude = geocoding_data['results'][0]['latitude']
     longitude = geocoding_data['results'][0]['longitude']
 
-    if request_type = 'historical':
+    if request_type == 'historical':
         api_request = get_openmeteo_hist_api_request(latitude, longitude, start_date, end_date, freq, wx_params)
-    elif request_type = 'forecast':
+    elif request_type == 'forecast':
         api_request = get_openmeteo_forecast_api_request(latitude, longitude, start_date, end_date, freq, wx_params)
     else:
         raise ValueError
