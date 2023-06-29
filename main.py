@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 
 # Read data, remove nulls and redundant columns
 data = get_elia_data_ods001()
-data = data.dropna()
 data.drop('Resolution code', axis=1, inplace=True)
 
 # standardise to utc due to daylight saving & set date as index
@@ -128,6 +127,13 @@ joblib.dump(lgb_regressor, 'lgb.pkl')
 
 # need to add df_prdict starting from training data (last 4 days) to be able to create lagged features
 # predict
+
+df_features_merged = df_wx_merged.merge(df, 
+                how = 'left', 
+                left_index = True,
+                right_index = True)
+
+df = data['2023':one_day_back] # both included since date time index`
 
 
 start_date = today.strftime("%Y-%m-%d")
