@@ -19,14 +19,25 @@ data.set_index('DateTime', inplace=True)
 data = data.sort_index()
 
 # weather data
-start_date = data.index.min().strftime('%Y-%m-%d') # first date in load data
+start_date_hist = data.index.min().strftime('%Y-%m-%d') # first date in load data
 end_date = data.index.max().strftime('%Y-%m-%d') # last date in load data
+end_date_hist = (data.index.max() - datetime.timedelta(days=10)).strftime("%Y-%m-%d") # historical api can cater up to this
+
 freq = 'hourly'
 wx_params = ['temperature_2m', 'precipitation', 'apparent_temperature']
+past_days = 9
 
-df_wx_antwerp = get_wx_df(start_date, end_date, freq, wx_params, request_type='historical', city='Antwerp')
-df_wx_ghent = get_wx_df(start_date, end_date, freq, wx_params, request_type='historical', city='Ghent')
-df_wx_charleroi = get_wx_df(start_date, end_date, freq, wx_params, request_type='historical', city='Charleroi')
+df_wx_ghent_hist = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Ghent', request_type='historical')
+df_wx_antwerp_hist = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Antwerp', request_type='historical')
+df_wx_charleroi_hist = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Charleroi', request_type='historical')
+
+df_wx_ghent_past = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Ghent', request_type='forecast_past')
+df_wx_antwerp_past = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Antwerp', request_type='forecast_past')
+df_wx_charleroi_past = get_wx_df(start_date=start_date_hist, end_date=end_date_hist, past_days=past_days, freq=freq, wx_params=wx_params, city='Charleroi', request_type='forecast_past')
+
+df_wx_ghent = pd.concat([df_wx_ghent_hist, df_wx_ghent_past])
+df_wx_antwerp = pd.concat([df_wx_antwerp_hist, df_wx_antwerp_past])
+df_wx_charleroi = pd.concat([df_wx_charleroi_hist, df_wx_charleroi_past])
 
 df_wx_merged = df_wx_antwerp.merge(df_wx_ghent, 
                 how = 'left', 
@@ -45,7 +56,6 @@ one_day_back = (today - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 start_date = '2015-01-01'
 
 df = data[start_date:one_day_back] # both included since date time index`
-
 
 # add public holiday data
 country_code = 'BE'
@@ -78,7 +88,7 @@ df_features_merged['TotalLoadMaxTrend96to72'] =  (df_features_merged['TotalLoadM
 
 
 # format features
-df_features_merged.dropna()
+df_features_merged = df_features_merged.dropna()
 df_features_merged['week_of_year'] = df_features_merged.week_of_year.astype(float)
 
 features = df_features_merged.columns.values
@@ -128,6 +138,8 @@ joblib.dump(lgb_regressor, 'lgb.pkl')
 # need to add df_prdict starting from training data (last 4 days) to be able to create lagged features
 # predict
 
+df_dummy_pred = df_features_merged['2023-06-20':today]
+
 df_features_merged = df_wx_merged.merge(df, 
                 how = 'left', 
                 left_index = True,
@@ -140,30 +152,78 @@ start_date = today.strftime("%Y-%m-%d")
 end_date = (today + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
 
 # get forecast weather data
-df_wx_antwerp = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Antwerp')
-df_wx_ghent = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Ghent')
-df_wx_charleroi = get_wx_df(start_date, end_date, freq, wx_params, request_type='forecast', city='Charleroi')
+df_wx_antwerp_forecast = get_wx_df(start_date, end_date, past_days, freq, wx_params, request_type='forecast', city='Antwerp')
+df_wx_ghent_forecast = get_wx_df(start_date, end_date, past_days, freq, wx_params, request_type='forecast', city='Ghent')
+df_wx_charleroi_forecast = get_wx_df(start_date, end_date, past_days, freq, wx_params, request_type='forecast', city='Charleroi')
 
-df_wx_merged = df_wx_antwerp.merge(df_wx_ghent, 
+df_wx_pred = df_wx_antwerp_forecast.merge(df_wx_ghent_forecast, 
                 how = 'left', 
                 left_index = True,
                 right_index = True)
 
-df_wx_merged = df_wx_merged.merge(df_wx_charleroi, 
+df_wx_pred = df_wx_pred.merge(df_wx_charleroi_forecast, 
                 how = 'left', 
                 left_index = True,
                 right_index = True)
 
-df_wx_merged = df_wx_merged.resample('15T').mean().ffill()
+df_wx_pred = df_wx_pred.resample('15T').mean().ffill()
+
+
+
+# add calendar features to dataset
+df_dummy_predict_concat = pd.concat([df_dummy_pred, df_wx_pred])
+
+df_predict = featurize_datetime_index(df_dummy_predict_concat)
 
 # add public holiday data
 country_code = 'BE'
 be_holidays = holidays.country_holidays(country_code)
-df_hols = df_wx_merged[df_wx_merged.index.map(lambda x: x in be_holidays)]
-df_wx_merged['is_holiday'] = np.where(df_wx_merged.index.isin(df_hols.index), 1, 0)
+df_hols = df_predict[df_predict.index.map(lambda x: x in be_holidays)]
+df_predict['is_holiday'] = np.where(df_predict.index.isin(df_hols.index), 1, 0)
 
-# add calendar features to dataset
-df_predict = featurize_datetime_index(df_wx_merged)
+df_predict['Total Load'] = df_predict['Total Load'].ffill() # fill last known value
+df_predict['TotalLoadMaxLagged72h'] = df_predict['Total Load'].sort_index().rolling(72*4).max()
+df_predict['TotalLoadMinLagged72h'] = df_predict['Total Load'].sort_index().rolling(72*4).min()
+df_predict['TotalLoadMeanLagged72h'] = df_predict['Total Load'].sort_index().rolling(72*4).mean()
+df_predict['TotalLoadMaxLagged96h'] = df_predict['Total Load'].sort_index().rolling(96*4).max()
+df_predict['TotalLoadMinLagged96h'] = df_predict['Total Load'].sort_index().rolling(96*4).min()
+df_predict['TotalLoadMeanLagged96h'] = df_predict['Total Load'].sort_index().rolling(96*4).mean()
+df_predict['TotalLoadMinTrend96to72'] =  (df_predict['TotalLoadMinLagged96h'] - df_predict['TotalLoadMinLagged72h'])/df_predict['TotalLoadMinLagged96h']
+df_predict['TotalLoadMaxTrend96to72'] =  (df_predict['TotalLoadMaxLagged96h'] - df_predict['TotalLoadMaxLagged72h'])/df_predict['TotalLoadMaxLagged96h']
 
 
 gbm_pickle = joblib.load('lgb.pkl')
+
+
+features = df_predict.columns.values
+features = features.tolist()
+features.remove('Total Load')
+features.remove('time_of_day')
+features.remove('weekday_name')
+features.remove('month_name')
+
+# set target, features and labels
+target = 'Total Load'
+features.remove(target)
+
+X_test = df_predict[features][start_date:]
+
+#predict
+X_test['prediction'] = lgb_regressor.predict(X_test)
+
+
+results = df_predict.merge(X_test['prediction'], 
+                how = 'left', 
+                left_index = True,
+                right_index = True)
+
+plt.figure(figsize = (13, 7))
+ax = results[((today - datetime.timedelta(days=7)).strftime("%Y-%m-%d")):]['Total Load']\
+            .plot(linewidth = 3);
+results['prediction'].plot(style = '.', markersize = 9);
+plt.legend()
+plt.xlabel('days', fontsize = 15)
+plt.ylabel('energy usage', fontsize = 15)
+plt.title('Training Data vs Predictions: Three Day Prediction Unseen', fontsize = 20, pad = 20);
+plt.legend(fontsize = 15)
+plt.show()
