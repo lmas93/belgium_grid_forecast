@@ -204,26 +204,22 @@ features.remove('month_name')
 
 # set target, features and labels
 target = 'Total Load'
-features.remove(target)
 
 X_test = df_predict[features][start_date:]
 
 #predict
-X_test['prediction'] = lgb_regressor.predict(X_test)
-
+X_test['prediction'] = gbm_pickle.predict(X_test)
 
 results = df_predict.merge(X_test['prediction'], 
                 how = 'left', 
                 left_index = True,
                 right_index = True)
 
-plt.figure(figsize = (13, 7))
-ax = results[((today - datetime.timedelta(days=7)).strftime("%Y-%m-%d")):]['Total Load']\
-            .plot(linewidth = 3);
-results['prediction'].plot(style = '.', markersize = 9);
-plt.legend()
-plt.xlabel('days', fontsize = 15)
-plt.ylabel('energy usage', fontsize = 15)
-plt.title('Training Data vs Predictions: Three Day Prediction Unseen', fontsize = 20, pad = 20);
-plt.legend(fontsize = 15)
-plt.show()
+results['model_run_date'] = today.strftime('%Y-%m-%d') # add run date for comparison and analysis 
+
+# append results locally
+filename = 'predictions_hist.csv'
+if not os.path.isfile(filename):
+   results[today.strftime('%Y-%m-%d'):].to_csv(filename, header=results.columns)
+else: # else it exists so append without writing the header
+   results[today.strftime('%Y-%m-%d'):].to_csv(filename, mode='a', header=False)

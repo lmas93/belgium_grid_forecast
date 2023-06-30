@@ -19,11 +19,16 @@ prediction = pd.read_csv('predictions_hist.csv')
 prediction['DateTimeUTC'] = pd.to_datetime(prediction['DateTimeUTC'], utc=True)
 prediction.set_index('DateTimeUTC', inplace=True)
 
-plt.figure()
-plt.plot(data[three_days_back:].index, data[three_days_back:]['Total Load'], label = 'Actual')
+
+colors = ['#004c6d', '#6996b3', '#c1e7ff']
+plt.figure(figsize=(10,6))
+plt.plot(data[three_days_back:].index, data[three_days_back:]['Total Load'], label = 'Actual', color='#de425b')
 for i, date in enumerate(prediction['model_run_date'].unique()):
-    plt.plot(prediction.query('model_run_date == @date').index, prediction.query('model_run_date == @date')['prediction'], label = 'pred_'+str(i))
+    plt.plot(prediction.query('model_run_date == @date').index, prediction.query('model_run_date == @date')['prediction']\
+             , label = 'pred_'+str(i), color = colors[i])
 plt.legend()
 plt.ylabel('Total Load (MWh)')
 plt.xlabel('Date Time UTC')
+plt.savefig('comparison_plot.png', dpi=300)
 plt.show()
+
